@@ -11,7 +11,7 @@ class MonotonicWrapper(Module):
         lipschitz_module: Module,  # Must already be lipschitz
         lipschitz_const: float = 1.0,
         monotonic_constraints: T.Optional[T.Iterable] = None,
-    ):
+        device: str = "cpu"):
         """This is a wrapper around a module with a lipschitz_const lipschitz constant. It
             adds a term to the output of the module which enforces monotonicity constraints
             given by monotonic_constraints.
@@ -33,20 +33,24 @@ class MonotonicWrapper(Module):
                 If a 2D tensor, the (i, j)-th element specifies the constraint on the j-th output
                 with respect to the i-th input.
                 Default: ``None``
+            device (str, optional): Device to use for the module. Defaults to "cpu".
         """
         super().__init__()
-        self.nn = lipschitz_module
+        self.nn = lipschitz_module.to(device)
         self.register_buffer(
-            "lipschitz_const", torch.Tensor([lipschitz_const])
+            "lipschitz_const", torch.Tensor([lipschitz_const]).to(device)
         )
         if monotonic_constraints is None:
             monotonic_constraints = [1]
-        monotonic_constraints = torch.Tensor(monotonic_constraints)
+        monotonic_constraints = torch.Tensor(monotonic_constraints).to(device)
         if monotonic_constraints.ndim == 1:
             monotonic_constraints = monotonic_constraints.unsqueeze(-1)
         self.register_buffer("monotonic_constraints", monotonic_constraints)
 
     def forward(self, x: torch.Tensor):
+        # print(f"x device: {x.device}")
+        # print(f"lipschitz_const device: {self.lipschitz_const.device}")
+        # print(f"mc device: {self.monotonic_constraints.device}")
         mc = self.monotonic_constraints.expand(x.shape[1], -1)  # type: ignore
         residual = self.lipschitz_const * x @ mc
         return self.nn(x) + residual
